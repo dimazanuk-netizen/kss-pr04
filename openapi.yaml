@@ -1,0 +1,630 @@
+openapi: 3.1.0
+info:
+  title: Події та клуби API
+  version: 1.0.0
+  summary: API для керування клубами, подіями та реєстраціями учасників
+  description: |
+    Варіант № 10. Виконав: Занюк Дмитро В., група 356-Д.
+
+    Інформаційна система забезпечує облік клубів коледжу, створення подій,
+    реєстрацію учасників і скасування подій керівниками клубів.
+    Шляхи від /api/v1; JSON у camelCase; дати – ISO 8601;
+    колекції повертаються сторінками; помилки – application/problem+json.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Локальний сервер розробки
+tags:
+  - name: auth
+    description: Автентифікація
+  - name: clubs
+    description: Клуби коледжу
+  - name: events
+    description: Події клубів
+  - name: registrations
+    description: Реєстрації учасників на події
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Вхід у систему
+      x-kss-action: true
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Вхід успішний
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /clubs:
+    get:
+      tags: [clubs]
+      operationId: listClubs
+      summary: Отримати список клубів
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+        - name: leaderId
+          in: query
+          schema: { type: integer }
+        - name: name
+          in: query
+          description: Пошук за частиною назви
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, -name, createdAt, -createdAt]
+      responses:
+        "200":
+          description: Сторінка клубів
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubPage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [clubs]
+      operationId: createClub
+      summary: Створити клуб
+      description: Створення клубу доступне адміністратору.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClubCreate" }
+      responses:
+        "201":
+          description: Клуб створено
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Club" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /clubs/{clubId}:
+    parameters:
+      - name: clubId
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [clubs]
+      operationId: getClub
+      summary: Отримати клуб за ідентифікатором
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Дані клубу
+          headers:
+            ETag:
+              description: Версія ресурсу
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Club" }
+        "304": { description: Ресурс не змінився }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [clubs]
+      operationId: updateClub
+      summary: Частково оновити клуб
+      description: Доступно адміністратору або керівнику цього клубу.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: "#/components/schemas/ClubUpdate" }
+      responses:
+        "200":
+          description: Клуб оновлено
+          headers:
+            ETag:
+              description: Нова версія ресурсу
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Club" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [clubs]
+      operationId: deleteClub
+      summary: Видалити клуб
+      responses:
+        "204": { description: Клуб видалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events:
+    get:
+      tags: [events]
+      operationId: listEvents
+      summary: Отримати список подій
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: clubId
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string, enum: [planned, cancelled, completed] }
+        - name: startsAfter
+          in: query
+          schema: { type: string, format: date-time }
+        - name: startsBefore
+          in: query
+          schema: { type: string, format: date-time }
+        - name: location
+          in: query
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [startsAt, -startsAt, createdAt, -createdAt, title]
+      responses:
+        "200":
+          description: Сторінка подій
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [events]
+      operationId: createEvent
+      summary: Створити подію
+      description: Подію може створити лише керівник клубу, до якого вона належить.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventCreate" }
+      responses:
+        "201":
+          description: Подію створено
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /events/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [events]
+      operationId: getEvent
+      summary: Отримати подію за ідентифікатором
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Дані події
+          headers:
+            ETag:
+              description: Версія ресурсу
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "304": { description: Ресурс не змінився }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [events]
+      operationId: updateEvent
+      summary: Частково оновити подію
+      description: Доступно керівнику клубу; статус змінюється окремою дією.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: "#/components/schemas/EventUpdate" }
+      responses:
+        "200":
+          description: Подію оновлено
+          headers:
+            ETag:
+              description: Нова версія ресурсу
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [events]
+      operationId: deleteEvent
+      summary: Видалити подію
+      responses:
+        "204": { description: Подію видалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/registrations:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [registrations]
+      operationId: listEventRegistrations
+      summary: Отримати реєстрації на подію
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, cancelled] }
+        - name: participantId
+          in: query
+          schema: { type: integer }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [registeredAt, -registeredAt, participantName]
+      responses:
+        "200":
+          description: Сторінка реєстрацій
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegistrationPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [registrations]
+      operationId: createRegistration
+      summary: Зареєструватися на подію
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrationCreate" }
+      responses:
+        "201":
+          description: Реєстрацію створено
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Registration" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /registrations/{registrationId}:
+    parameters:
+      - name: registrationId
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [registrations]
+      operationId: getRegistration
+      summary: Отримати реєстрацію за ідентифікатором
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Дані реєстрації
+          headers:
+            ETag:
+              description: Версія ресурсу
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Registration" }
+        "304": { description: Ресурс не змінився }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [registrations]
+      operationId: deleteRegistration
+      summary: Скасувати власну реєстрацію
+      responses:
+        "204": { description: Реєстрацію скасовано }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events/{eventId}/cancellation:
+    post:
+      tags: [events]
+      operationId: cancelEvent
+      summary: Скасувати подію
+      description: Доступно лише керівнику клубу. Подію, яка вже завершена або скасована, скасувати не можна.
+      x-kss-action: true
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Подію скасовано
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Токен, отриманий через POST /auth/login
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Номер сторінки (з 1)
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      description: Кількість елементів на сторінці
+      schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      schema: { type: string }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag поточної версії ресурсу
+      schema: { type: string }
+  headers:
+    Location:
+      description: URI створеного ресурсу
+      schema: { type: string, format: uri-reference }
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 8 }
+      example: { email: student@college.example.ua, password: student123 }
+    LoginResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, const: Bearer }
+        expiresIn: { type: integer }
+      example:
+        accessToken: 2f1c9a54-8d3e-4b7a-9f1e-6c2d8a4b0e71
+        tokenType: Bearer
+        expiresIn: 3600
+    ProblemDetails:
+      type: object
+      description: Опис помилки за RFC 9457
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference, default: about:blank }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+    ValidationProblem:
+      allOf:
+        - $ref: "#/components/schemas/ProblemDetails"
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+    Club:
+      type: object
+      required: [id, name, description, leaderId, createdAt, isActive]
+      properties:
+        id: { type: integer, readOnly: true }
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: string, maxLength: 2000 }
+        leaderId: { type: integer }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        isActive: { type: boolean }
+    ClubCreate:
+      type: object
+      required: [name, description, leaderId]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: string, maxLength: 2000 }
+        leaderId: { type: integer, minimum: 1 }
+        isActive: { type: boolean, default: true }
+    ClubUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: string, maxLength: 2000 }
+        leaderId: { type: integer, minimum: 1 }
+        isActive: { type: boolean }
+    Event:
+      type: object
+      required: [id, clubId, title, description, location, startsAt, capacity, status, createdBy, createdAt]
+      properties:
+        id: { type: integer, readOnly: true }
+        clubId: { type: integer }
+        title: { type: string, minLength: 2, maxLength: 150 }
+        description: { type: string, maxLength: 4000 }
+        location: { type: string, maxLength: 250 }
+        startsAt: { type: string, format: date-time }
+        capacity: { type: integer, minimum: 1 }
+        status: { type: string, enum: [planned, cancelled, completed] }
+        createdBy: { type: integer, readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+    EventCreate:
+      type: object
+      required: [clubId, title, description, location, startsAt, capacity]
+      additionalProperties: false
+      properties:
+        clubId: { type: integer, minimum: 1 }
+        title: { type: string, minLength: 2, maxLength: 150 }
+        description: { type: string, maxLength: 4000 }
+        location: { type: string, maxLength: 250 }
+        startsAt: { type: string, format: date-time }
+        capacity: { type: integer, minimum: 1 }
+    EventUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 2, maxLength: 150 }
+        description: { type: string, maxLength: 4000 }
+        location: { type: string, maxLength: 250 }
+        startsAt: { type: string, format: date-time }
+        capacity: { type: integer, minimum: 1 }
+    Registration:
+      type: object
+      required: [id, eventId, participantId, participantName, participantEmail, registeredAt, status]
+      properties:
+        id: { type: integer, readOnly: true }
+        eventId: { type: integer }
+        participantId: { type: integer }
+        participantName: { type: string }
+        participantEmail: { type: string, format: email }
+        registeredAt: { type: string, format: date-time, readOnly: true }
+        status: { type: string, enum: [active, cancelled] }
+    RegistrationCreate:
+      type: object
+      required: [participantName, participantEmail]
+      additionalProperties: false
+      properties:
+        participantName: { type: string, minLength: 2, maxLength: 120 }
+        participantEmail: { type: string, format: email }
+    ClubPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Club" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    EventPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Event" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    RegistrationPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Registration" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+  responses:
+    BadRequest:
+      description: Некоректний запит
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    Unauthorized:
+      description: Відсутній або недійсний токен
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    Forbidden:
+      description: Недостатньо прав для виконання операції
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    NotFound:
+      description: Ресурс не знайдено
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    Conflict:
+      description: Конфлікт із поточним станом ресурсу
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    ValidationFailed:
+      description: Дані не пройшли перевірку
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ValidationProblem" }
+    PreconditionFailed:
+      description: ETag не відповідає поточній версії ресурсу
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }

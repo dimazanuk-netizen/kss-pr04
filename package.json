@@ -1,0 +1,21 @@
+{
+  "name": "rest-api-design",
+  "version": "1.0.0",
+  "description": "Практична робота № 4. Проєктування REST API інформаційної системи",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "spectral lint openapi.yaml --fail-severity=error",
+    "docs": "redocly build-docs openapi.yaml -o docs/index.html",
+    "mock": "prism mock openapi.yaml --port 4010"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@redocly/cli": "^2.54.3",
+    "@stoplight/prism-cli": "^5.16.0",
+    "@stoplight/spectral-cli": "^6.16.3"
+  }
+}

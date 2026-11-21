@@ -329,6 +329,7 @@ paths:
               schema: { $ref: "#/components/schemas/RegistrationPage" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       tags: [registrations]
@@ -377,11 +378,12 @@ paths:
               schema: { $ref: "#/components/schemas/Registration" }
         "304": { description: Ресурс не змінився }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       tags: [registrations]
       operationId: deleteRegistration
-      summary: Скасувати власну реєстрацію
+      summary: Видалити реєстрацію (відмова від участі)
       responses:
         "204": { description: Реєстрацію скасовано }
         "401": { $ref: "#/components/responses/Unauthorized" }
